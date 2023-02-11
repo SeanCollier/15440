@@ -6,23 +6,38 @@ import java.util.*;
 class Proxy {
 
 	
-	private static class FileHandler implements FileHandling {
+	private static class FileHandler implements FileHandling {	
+
 
 		private HashMap<Integer, custFile> fdMap = new HashMap<Integer, custFile>();
 		private int fdCounter = 0;
 
 		public int open( String path, OpenOption o ) {
 			System.err.println(String.format("##### Open Called with Pathname: %s", path));
+
+
+			//generate new fd for file at path
 			int fd = getNewFd();
+
+			//check if fd is already in map, with current fd policy this shouldnt happen
+			if (fdMap.containsKey(fd)){
+				System.err.println(String.format("WARNING: newly generated fd (%d) already exists in fdMap", fd));
+			}
+
+			//define new File object, and check if null
 			File newFile = new File(path);
 			if (newFile == null){
 				System.err.println("Error: Attempt to create File object from path failed. Got null");
 			}
 			custFile newCustFile;
+
+			//convert openOption to mode for creation of RandomAccessFile
 			String mode = optionToMode(o);
 			if (mode == "failure"){
 				return Errors.EINVAL;
 			}
+
+			//check for errors based on openOption
 			switch(o){
 				case CREATE_NEW:
 					if (newFile.exists()){
@@ -34,6 +49,11 @@ class Proxy {
 						return Errors.EISDIR;
 					}
 					break;
+				case CREATE:
+					if (newFile.isDirectory()){
+						System.err.println("Error: Open called with CREATE on directory");
+						return Errors.EISDIR;
+					}
 				case WRITE:
 					if (newFile.isDirectory()){
 						System.err.println("Error: Open called with WRITE on directory");
@@ -53,7 +73,36 @@ class Proxy {
 				
 			}
 
-			return Errors.ENOSYS;
+			//initialize custFile object to store in Hashmap. Handle exceptions if necessary
+			try {
+				newCustFile = new custFile(newFile, mode);
+			} 
+			catch (SecurityException e){
+				System.err.println("Error: SecurityException caught, permissions denied on creation of RandomAccessFile in Open");
+				System.err.println(String.format("path: %s, permissions: %s", path, mode));
+				e.printStackTrace();
+				return Errors.EPERM;
+			}
+			catch (FileNotFoundException e){
+				System.err.println(String.format("Error: FileNotFoundException caught, no such file with path: %s", path));
+				e.printStackTrace();
+				return Errors.ENOENT;
+			}
+			catch (Exception e){
+				System.err.println(String.format("Error: Unknown Exception Caught"));
+				e.printStackTrace();
+				throw e;
+			}
+			
+			//given that no exceptions were thrown, set internal File object in the custFile
+			newCustFile.setJFile(newFile);
+			
+			//associate fd with custFile object
+			fdMap.put(fd, newCustFile);
+
+			//return fd to client
+			System.err.println(String.format("Returning fd (%d) to client", fd));
+			return fd;
 		}
 
 		public int close( int fd ) {
@@ -123,7 +172,6 @@ class Proxy {
 	}
 
 	public static void main(String[] args) throws IOException {
-		System.out.println("Hello World");
 		(new RPCreceiver(new FileHandlingFactory())).run();
 	}
 }
