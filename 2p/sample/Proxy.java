@@ -48,12 +48,27 @@ class Proxy {
 						System.err.println("Error: Open called with CREATE_NEW on directory");
 						return Errors.EISDIR;
 					}
+					try {
+						newFile.createNewFile();
+					}
+					catch (IOException e){
+						e.printStackTrace();
+						return Errors.EINVAL;
+					}
 					break;
 				case CREATE:
 					if (newFile.isDirectory()){
 						System.err.println("Error: Open called with CREATE on directory");
 						return Errors.EISDIR;
 					}
+					try {
+						newFile.createNewFile();
+					}
+					catch (IOException e){
+						e.printStackTrace();
+						return Errors.EINVAL;
+					}
+					break;
 				case WRITE:
 					if (newFile.isDirectory()){
 						System.err.println("Error: Open called with WRITE on directory");
@@ -69,34 +84,40 @@ class Proxy {
 						System.err.println("Error: Open called with READ on file that doesn't exist");
 						return Errors.ENOENT;
 					}
+					/*
+					if (newFile.isDirectory()){
+						System.err.println("Error: Open called with READ on directory");
+						return Errors.EISDIR;
+					}*/
 					break;
 				
 			}
 
 			//initialize custFile object to store in Hashmap. Handle exceptions if necessary
-			try {
-				newCustFile = new custFile(newFile, mode);
-			} 
-			catch (SecurityException e){
-				System.err.println("Error: SecurityException caught, permissions denied on creation of RandomAccessFile in Open");
-				System.err.println(String.format("path: %s, permissions: %s", path, mode));
-				e.printStackTrace();
-				return Errors.EPERM;
-			}
-			catch (FileNotFoundException e){
-				System.err.println(String.format("Error: FileNotFoundException caught, no such file with path: %s", path));
-				e.printStackTrace();
-				return Errors.ENOENT;
-			}
-			catch (Exception e){
-				System.err.println(String.format("Error: Unknown Exception Caught"));
-				e.printStackTrace();
-				throw e;
-			}
+			newCustFile = new custFile(newFile, mode);
+			if (!newFile.isDirectory()){
+
+				try {
+					newCustFile.setRaf(mode);
+				}	 
+				catch (SecurityException e){
+					System.err.println("Error: SecurityException caught, permissions denied on creation of RandomAccessFile in Open");
+					System.err.println(String.format("path: %s, permissions: %s", path, mode));
+					e.printStackTrace();
+					return Errors.EPERM;
+				}
+				catch (FileNotFoundException e){
+					System.err.println(String.format("Error: FileNotFoundException caught, no such file with path: %s", path));
+					e.printStackTrace();
+					return Errors.ENOENT;
+				}
+				catch (Exception e){
+					System.err.println(String.format("Error: Unknown Exception Caught"));
+					e.printStackTrace();
+					throw e;
+				}
 			
-			//given that no exceptions were thrown, set internal File object in the custFile
-			newCustFile.setJFile(newFile);
-			
+			}
 			//associate fd with custFile object
 			fdMap.put(fd, newCustFile);
 
@@ -106,18 +127,160 @@ class Proxy {
 		}
 
 		public int close( int fd ) {
-			return Errors.ENOSYS;
+			System.err.println(String.format("####### Close called for fd %d", fd));
+			if (!fdMap.containsKey(fd)){
+				System.err.println("Error: Close called on fd which is not open");
+				return Errors.EBADF;
+			}
+
+			//get file from map
+			custFile currCustFile = fdMap.get(fd);
+			File currFile = currCustFile.getFile();
+			RandomAccessFile currRaf = currCustFile.getRaf();
+
+
+			//close connection
+			if (!currFile.isDirectory() && currRaf != null){
+
+				try{
+					currRaf.close();
+				}
+				catch(IOException e){
+					System.err.println("Error: IOException caught when attempting to close raf");
+					e.printStackTrace();
+					return Errors.EINVAL;
+				}
+				catch(NullPointerException e){
+					e.printStackTrace();
+					System.err.println("Error: NPE caught on close");
+					throw e;
+				}
+			}
+
+			//remove from map
+			fdMap.remove(fd);
+
+			return 0;
 		}
 
 		public long write( int fd, byte[] buf ) {
-			return Errors.ENOSYS;
+			System.err.println(String.format("####### Write called for fd %d", fd)); 
+			if (!fdMap.containsKey(fd)){
+				System.err.println(String.format("Error: fd %d not currently open"));
+				return Errors.EBADF;
+			}
+
+			//get custFile associated with fd
+			custFile currCustFile = fdMap.get(fd);
+			File currFile = currCustFile.getFile();
+
+			//check permissions
+			if (currCustFile.getMode() != "rw"){
+				System.err.println("Error: bad permissions for write");
+				return Errors.EBADF;
+			}
+
+			//check if is directory
+			
+			if (currFile.isDirectory()){
+				System.err.println("Error: write called on directory");
+				return Errors.EISDIR;
+			}
+			if (!currFile.exists()){
+				System.err.println("Error: write called with file that doesnt exist");
+				return Errors.ENOENT;
+			}
+
+			RandomAccessFile currRaf = currCustFile.getRaf();
+			try {
+			
+				currRaf.write(buf);
+			}
+			catch (IOException e){
+				System.err.println("Error: IOException caught on write");
+				e.printStackTrace();
+				return Errors.EINVAL;
+			}
+
+			System.err.println(String.format("Wrote %d bytes", buf.length));
+
+			return buf.length;
 		}
 
 		public long read( int fd, byte[] buf ) {
-			return Errors.ENOSYS;
+			System.err.println(String.format("####### Read called on fd %d", fd));
+			if (!fdMap.containsKey(fd)){
+				System.err.println(String.format("Error: fd %d not currently open", fd));
+				return Errors.EBADF;
+			}
+
+			//get custFile associated with fd
+			custFile currCustFile = fdMap.get(fd);
+			File currFile = currCustFile.getFile();
+
+			System.err.println(String.format("Pathname for read: %s", currFile.getAbsolutePath()));
+			//check if is directory
+			if (currFile.isDirectory()){
+				System.err.println("Error: read called on directory");
+				return Errors.EISDIR;
+			}
+			if (!currFile.exists()){
+				System.err.println(String.format("Error: Read called on File that does not exist with pathname %s", currFile.getAbsolutePath()));
+				return Errors.ENOENT;
+			}
+			RandomAccessFile currRaf = currCustFile.getRaf();
+			
+
+
+			
+			//read file contents
+
+			long bytesRead = 0;
+			try{
+				bytesRead = (long) currRaf.read(buf);
+			}
+			catch (IOException e){
+				System.err.println("Error: IOException on read");
+				e.printStackTrace();
+				return Errors.EINVAL;
+			}
+			if (bytesRead == -1){
+				System.err.println("Warning: Read returned -1");
+				return 0;
+			}
+			return bytesRead;
 		}
 
 		public long lseek( int fd, long pos, LseekOption o ) {
+			System.err.println(String.format("####### lseek called on fd %d", fd));
+			if (!fdMap.containsKey(fd)){
+				System.err.println(String.format("Error: fd %d not currently open", fd));
+				return Errors.EBADF;
+			}
+
+			//get custFile associated with fd
+			custFile currCustFile = fdMap.get(fd);
+			File currFile = currCustFile.getFile();
+
+			//check if is directory
+			if (currFile.isDirectory()){
+				System.err.println("Error: lseek called on directory");
+				return Errors.EISDIR;
+			}
+
+			if (!currFile.exists()){
+				System.err.println("Error: lseek called on file that does not exist");
+				return Errors.ENOENT;
+			}
+
+			RandomAccessFile currRaf = currCustFile.getRaf();
+			if (pos < 0){
+				System.err.println("Error: lseek called with pos < 0");
+				return Errors.EINVAL;
+			}
+
+
+
 			return Errors.ENOSYS;
 		}
 
