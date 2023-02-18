@@ -11,6 +11,8 @@ class custFile implements Serializable{
 	public boolean doesExist;
 	public byte[] data;	
 	public String pathname;
+	public String error = null;
+	public long length;
 	
 
 

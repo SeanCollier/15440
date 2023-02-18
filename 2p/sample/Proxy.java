@@ -2,11 +2,14 @@
 
 import java.io.*;
 import java.util.*;
+import java.rmi.*;
 
 class Proxy {
 	
 	public static String cacheDir;
 	public static Cache cache;
+	public static Server server;
+
 
 	private static class FileHandler implements FileHandling {	
 
@@ -69,6 +72,7 @@ class Proxy {
 					}
 					try {
 						newFile.createNewFile();
+						newCustFile.doesExist = true;
 					}
 					catch (IOException e){
 						e.printStackTrace();
