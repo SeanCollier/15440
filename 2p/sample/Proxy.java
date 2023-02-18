@@ -4,10 +4,11 @@ import java.io.*;
 import java.util.*;
 
 class Proxy {
-
 	
-	private static class FileHandler implements FileHandling {	
+	public static String cacheDir;
+	public static Cache cache;
 
+	private static class FileHandler implements FileHandling {	
 
 		private HashMap<Integer, custFile> fdMap = new HashMap<Integer, custFile>();
 		private int fdCounter = 0;
@@ -24,30 +25,35 @@ class Proxy {
 				System.err.println(String.format("WARNING: newly generated fd (%d) already exists in fdMap", fd));
 			}
 
-			//define new File object, and check if null
-			File newFile = new File(path);
-			if (newFile == null){
-				System.err.println("Error: Attempt to create File object from path failed. Got null");
-			}
-			custFile newCustFile;
-
 			//convert openOption to mode for creation of RandomAccessFile
 			String mode = optionToMode(o);
 			if (mode == "failure"){
 				return Errors.EINVAL;
 			}
 
+			custFile newCustFile;	
+			newCustFile = new custFile(path, mode);
+
+			//query cache for file
+			path = cacheDir + "/" + cache.query(path, mode, newCustFile);
+
+			//define new File object, and check if null
+			File newFile = new File(path);
+			if (newFile == null){
+				System.err.println("Error: Attempt to create File object from path failed. Got null");
+			}	
+
 			//check for errors based on openOption
 			switch(o){
 				case CREATE_NEW:
-					if (newFile.exists()){
-						System.err.println("Error: Open called with CREATE_NEW on file which already exists");
-						return Errors.EEXIST;
-					}
-					if (newFile.isDirectory()){
+					if (newCustFile.isDirectory()){
 						System.err.println("Error: Open called with CREATE_NEW on directory");
 						return Errors.EISDIR;
 					}
+					if (newFile.exists()){
+						System.err.println("Error: Open called with CREATE_NEW on file which already exists");
+						return Errors.EEXIST;
+					}	
 					try {
 						newFile.createNewFile();
 					}
@@ -57,7 +63,7 @@ class Proxy {
 					}
 					break;
 				case CREATE:
-					if (newFile.isDirectory()){
+					if (newCustFile.isDirectory()){
 						System.err.println("Error: Open called with CREATE on directory");
 						return Errors.EISDIR;
 					}
@@ -70,7 +76,7 @@ class Proxy {
 					}
 					break;
 				case WRITE:
-					if (newFile.isDirectory()){
+					if (newCustFile.isDirectory()){
 						System.err.println("Error: Open called with WRITE on directory");
 						return Errors.EISDIR;
 					}
@@ -94,8 +100,7 @@ class Proxy {
 			}
 
 			//initialize custFile object to store in Hashmap. Handle exceptions if necessary
-			newCustFile = new custFile(newFile, mode);
-			if (!newFile.isDirectory()){
+			if (!newCustFile.isDirectory()){
 
 				try {
 					newCustFile.setRaf(mode);
@@ -140,7 +145,7 @@ class Proxy {
 
 
 			//close connection
-			if (!currFile.isDirectory() && currRaf != null){
+			if (!currCustFile.isDirectory() && currRaf != null){
 
 				try{
 					currRaf.close();
@@ -182,7 +187,7 @@ class Proxy {
 
 			//check if is directory
 			
-			if (currFile.isDirectory()){
+			if (currCustFile.isDirectory()){
 				System.err.println("Error: write called on directory");
 				return Errors.EISDIR;
 			}
@@ -220,7 +225,7 @@ class Proxy {
 
 			System.err.println(String.format("Pathname for read: %s", currFile.getAbsolutePath()));
 			//check if is directory
-			if (currFile.isDirectory()){
+			if (currCustFile.isDirectory()){
 				System.err.println("Error: read called on directory");
 				return Errors.EISDIR;
 			}
@@ -263,7 +268,7 @@ class Proxy {
 			File currFile = currCustFile.getFile();
 
 			//check if is directory
-			if (currFile.isDirectory()){
+			if (currCustFile.isDirectory()){
 				System.err.println("Error: lseek called on directory");
 				return Errors.EISDIR;
 			}
@@ -273,19 +278,71 @@ class Proxy {
 				return Errors.ENOENT;
 			}
 
-			RandomAccessFile currRaf = currCustFile.getRaf();
+			RandomAccessFile raf = currCustFile.getRaf();
 			if (pos < 0){
 				System.err.println("Error: lseek called with pos < 0");
 				return Errors.EINVAL;
 			}
 
+			switch(o){
+				case FROM_CURRENT:
+					try{
+						pos = pos + raf.getFilePointer();
+					}
+					catch (IOException e){
+						e.printStackTrace();
+						return Errors.EINVAL;
+					}
+					break;
+				case FROM_START:
+					break;
+				case FROM_END:
+					try{	
+						pos = pos + raf.length();
+					}
+					catch (IOException e){
+						e.printStackTrace();
+						return Errors.EINVAL;
+					}
+					break;
+				default:
+					System.err.println("Error: lseek called with unknown option");
+					return Errors.EINVAL;
+			}
+			try {
+				raf.seek(pos);
+			}
+			catch (IOException e){
+				e.printStackTrace();
+				return Errors.EINVAL;
+			}
+			return pos;
 
-
-			return Errors.ENOSYS;
 		}
 
 		public int unlink( String path ) {
-			return Errors.ENOSYS;
+			System.err.println(String.format("###### Unlink called for path %s", path));
+
+			File currFile = new File(path);
+			if (!currFile.exists()){
+				System.err.println("Error: unlink called on file which does not exist");
+				return Errors.ENOENT;
+			}
+			boolean deleted = false;
+			try{
+				deleted = currFile.delete();
+			}
+			catch (SecurityException e){
+				e.printStackTrace();
+				return Errors.EPERM;
+			}
+			if (deleted){
+				return 0;
+			}
+			System.out.println("Error: file not properly deleted");
+			return Errors.EINVAL;
+			
+			
 		}
 
 		public void clientdone() {
@@ -335,6 +392,8 @@ class Proxy {
 	}
 
 	public static void main(String[] args) throws IOException {
+		cacheDir = args[2];
+		cache = new Cache();
 		(new RPCreceiver(new FileHandlingFactory())).run();
 	}
 }

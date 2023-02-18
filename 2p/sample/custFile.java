@@ -1,14 +1,21 @@
 import java.io.*;
 import java.util.*;
 
-class custFile {
+class custFile implements Serializable{
 	
 	private RandomAccessFile raf = null;
 	private File jFile;
 	private String mode;
 
-	public custFile(File fileObj, String newMode){
-		jFile = fileObj;
+	public boolean isDir;
+	public boolean doesExist;
+	public byte[] data;	
+	public String pathname;
+	
+
+
+	public custFile(String pathname, String newMode){
+		this.pathname = pathname;
 		mode = newMode;
 	}
 	public void setRaf(String mode) throws FileNotFoundException{
@@ -29,5 +36,13 @@ class custFile {
 
 	public RandomAccessFile getRaf(){
 		return raf;
+	}
+
+	public boolean isDirectory(){
+		return isDir;
+	}
+
+	public boolean exists(){
+		return doesExist;
 	}
 }
