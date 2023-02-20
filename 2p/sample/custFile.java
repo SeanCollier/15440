@@ -1,7 +1,7 @@
 import java.io.*;
 import java.util.*;
 
-class custFile implements Serializable{
+public class custFile implements Serializable{
 	
 	private RandomAccessFile raf = null;
 	private File jFile;

@@ -3,12 +3,13 @@
 import java.io.*;
 import java.util.*;
 import java.rmi.*;
+import java.rmi.registry.*;
 
 class Proxy {
 	
 	public static String cacheDir;
 	public static Cache cache;
-	public static Server server;
+	public static fileServerIntf server;
 
 
 	private static class FileHandler implements FileHandling {	
@@ -18,7 +19,6 @@ class Proxy {
 
 		public int open( String path, OpenOption o ) {
 			System.err.println(String.format("##### Open Called with Pathname: %s", path));
-
 
 			//generate new fd for file at path
 			int fd = getNewFd();
@@ -38,13 +38,16 @@ class Proxy {
 			newCustFile = new custFile(path, mode);
 
 			//query cache for file
-			path = cacheDir + "/" + cache.query(path, mode, newCustFile);
+			String newPath = cacheDir + "/" + cache.query(path, mode, newCustFile);
+			System.err.println(String.format("New pathname after querying cache: %s", newPath));
 
 			//define new File object, and check if null
-			File newFile = new File(path);
+			File newFile = new File(newPath);
 			if (newFile == null){
 				System.err.println("Error: Attempt to create File object from path failed. Got null");
 			}	
+
+			newCustFile.setJFile(newFile);
 
 			//check for errors based on openOption
 			switch(o){
@@ -90,6 +93,7 @@ class Proxy {
 					}
 					break;
 				case READ:
+					System.err.println(String.format("newFile path: %s", newFile.getAbsolutePath()));
 					if (!newFile.exists()){
 						System.err.println("Error: Open called with READ on file that doesn't exist");
 						return Errors.ENOENT;
@@ -111,12 +115,12 @@ class Proxy {
 				}	 
 				catch (SecurityException e){
 					System.err.println("Error: SecurityException caught, permissions denied on creation of RandomAccessFile in Open");
-					System.err.println(String.format("path: %s, permissions: %s", path, mode));
+					System.err.println(String.format("path: %s, permissions: %s", newPath, mode));
 					e.printStackTrace();
 					return Errors.EPERM;
 				}
 				catch (FileNotFoundException e){
-					System.err.println(String.format("Error: FileNotFoundException caught, no such file with path: %s", path));
+					System.err.println(String.format("Error: FileNotFoundException caught, no such file with path: %s", newPath));
 					e.printStackTrace();
 					return Errors.ENOENT;
 				}
@@ -397,7 +401,15 @@ class Proxy {
 
 	public static void main(String[] args) throws IOException {
 		cacheDir = args[2];
-		cache = new Cache();
+
+		try {
+			Registry registry = LocateRegistry.getRegistry(args[0], Integer.parseInt(args[1]));
+			server = (fileServerIntf) registry.lookup("Server:"+args[1]);
+		}
+		catch (Exception e){
+			e.printStackTrace();
+		}
+		cache = new Cache(cacheDir, server);
 		(new RPCreceiver(new FileHandlingFactory())).run();
 	}
 }

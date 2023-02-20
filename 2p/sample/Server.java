@@ -6,16 +6,26 @@ import java.io.*;
 import java.util.*;
 
 public class Server extends UnicastRemoteObject implements fileServerIntf {
-	public Server() throws RemoteException {
-		super(0);
+
+	public String root;
+
+	public Server(int port) throws RemoteException {
+		super(port);
 	}
 
 	public custFile open(custFile cFile){
-		File file = new File(cFile.pathname);
+		File file = new File(root + cFile.pathname);
+		System.err.println(String.format("Open called for file with path: %s", root + cFile.pathname));
 		cFile.doesExist = file.exists();
 		cFile.isDir = file.isDirectory();
 
 		if (cFile.isDir || !cFile.doesExist){
+			if (!file.exists()){
+				System.err.println("File does not exist");
+			}
+			if (file.isDirectory()){
+				System.err.println("File is Directory");
+			}
 			return cFile;
 		}
 
@@ -52,6 +62,20 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 
 		return cFile;
 
+	}
+
+	public static void main (String[] args) throws IOException {
+		int port = Integer.parseInt(args[0]);
+
+		try{
+			Server server = new Server(port);
+			server.root = args[1] + "/";
+			Registry registry = LocateRegistry.createRegistry(port);
+			registry.bind("Server:"+args[0], server);	
+		}
+		catch (Exception e){
+			e.printStackTrace();
+		}
 	}
 	
 }

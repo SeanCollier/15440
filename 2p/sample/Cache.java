@@ -2,18 +2,29 @@ import java.io.*;
 import java.util.*;
 import java.nio.file.*;
 import java.lang.System.*;
+import java.rmi.RemoteException;
+import java.rmi.*;
 
 class Cache {	
 
 	public LinkedHashMap<String, CacheFile> cacheMap = new LinkedHashMap<String, CacheFile>();
+	
+	private String root;
+	private fileServerIntf server;
+
+	public Cache (String root, fileServerIntf server){
+		this.root = root;
+		this.server = server;
+	}
 
 	public String query(String pathname, String mode, custFile cFile){
+		System.err.println(String.format("Querying cache for with pathname: %s", pathname));
 		boolean readOnly = (mode == "w");
 		Path path = Paths.get(pathname);
 		Path normalPath = path.normalize();
 		String adjPath = normalPath.toString().replaceAll("/", "#@#");
 		long openedTime = System.nanoTime();
-		String newPath = adjPath + "_" + Long.toString(openedTime);
+		String newPathname = adjPath + "_" + Long.toString(openedTime);
 
 		//check to see if file already in cache
 		CacheFile recentCacheFile = null;
@@ -28,15 +39,40 @@ class Cache {
 			}
 		}
 
-		//TODO: if file is not in cache, fetch from server, and create read only and written version, add (both?) to cache, make sure to handle case where file doesnt exist, or is directory
-		//For now, assume exists, is in cache, and is not directory. In future, this will be set by the custFile returned by server
-		cFile.doesExist = true;
-		cFile.isDir = false;
+
+		
 		if (recentCacheFile == null){
-			recentCacheFile = new CacheFile(newPath, openedTime, true);
-			File file = new File(newPath);
+
+			System.err.println(String.format("Cache miss on pathname: %s. Checking server", pathname));
+			try{
+				cFile = server.open(cFile);
+			}
+			catch (RemoteException e){
+				e.printStackTrace();
+			}
+
+
+			if (cFile.error != null){
+				return null;
+			}
+
+			if (!cFile.exists() || cFile.isDirectory()){
+				if (!cFile.exists()){
+					System.err.println("file does not exist on server side");
+				}
+				if (cFile.isDirectory()){
+					System.err.println("file is directory on server side");
+				}
+				return newPathname;
+			}
+
+			recentCacheFile = new CacheFile(newPathname + "_FETCHED", openedTime, true);
+			File file = new File(root + "/" + newPathname+"_FETCHED");
+			cacheMap.put(newPathname+"_FETCHED",recentCacheFile);
 			try {
 				file.createNewFile();
+				RandomAccessFile raf = new RandomAccessFile(file, "rw");
+				raf.write(cFile.data);
 			}
 			catch (IOException e){
 				e.printStackTrace();
@@ -57,24 +93,25 @@ class Cache {
 
 		//custFile is not read only. Must copy data from most recent read-only file to new writable file
 
-		CacheFile newCacheFile = new CacheFile(newPath, openedTime, false);
-		File file = new File(newPath);
-		try {
-			file.createNewFile();
+		CacheFile newCacheFile = new CacheFile(newPathname, openedTime, false);
+		
+		//Copy recentCacheFile's file to new file, return path to that new file
+		Path origPath = Paths.get(root + "/" + recentCacheFile.pathname);
+		Path copyPath = Paths.get(root + "/" + newPathname);
+		try{
+			Files.copy(origPath, copyPath, StandardCopyOption.REPLACE_EXISTING);
 		}
 		catch (IOException e){
 			e.printStackTrace();
-			cFile.error = "IO";
+			cFile.error="IO";
 			return null;
 		}
-		catch (SecurityException e){
-			e.printStackTrace();
-			cFile.error = "Security";
-			return null;
-		}
-		//TODO: Copy recentCacheFile's file to new file, return path to that new file
+		
+		//Place newCacheFile in cache
+		cacheMap.put(newPathname, newCacheFile);
 
-		return newPath;
+
+		return newPathname;
 	}
 
 }
