@@ -15,6 +15,8 @@ public class custFile implements Serializable{
 	public String error = null;
 	public long length;
 	public boolean modified = false;
+	public String cacheFilePath;
+	public String adjPathname;
 	
 
 

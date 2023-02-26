@@ -38,7 +38,10 @@ class Proxy {
 			newCustFile = new custFile(path, mode);
 
 			//query cache for file
-			String newPath = cacheDir + "/" + cache.query(path, mode, newCustFile);
+			String pathInCache = cache.query(path, mode, newCustFile);
+			String newPath = cacheDir + "/" + pathInCache;
+			newCustFile.cacheFilePath = pathInCache;
+
 			if (newCustFile.error != null){
 				switch(newCustFile.error){
 					case "FileNotFound":
@@ -191,6 +194,7 @@ class Proxy {
 						currRaf.close();
 						currCustFile.raf = null;
 					}
+					cache.close(currCustFile);
 				}
 				catch(IOException e){
 					System.err.println("Error: IOException caught when attempting to close raf");
@@ -202,7 +206,11 @@ class Proxy {
 					System.err.println("Error: NPE caught on close");
 					throw e;
 				}
+				
+				cache.close(currCustFile);
+				
 			}
+
 
 			//remove from map
 			fdMap.remove(fd);
