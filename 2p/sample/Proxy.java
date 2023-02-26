@@ -39,6 +39,26 @@ class Proxy {
 
 			//query cache for file
 			String newPath = cacheDir + "/" + cache.query(path, mode, newCustFile);
+			if (newCustFile.error != null){
+				switch(newCustFile.error){
+					case "FileNotFound":
+						System.err.println("FileNotFoundException on server");
+						return Errors.ENOENT;
+					case "Security":
+						System.err.println("SecurityException on server");
+						return Errors.EPERM;
+					case "IllegalArgument":
+						System.err.println("IllegalArgumentException on server");
+						return Errors.EINVAL;
+					case "IO":
+						System.err.println("IOException on server");
+						return Errors.EINVAL;
+					default:
+						System.err.println(String.format("Unknown error caughtin cFile error: %s", newCustFile.error));
+						break;
+						
+				}
+			}
 			System.err.println(String.format("New pathname after querying cache: %s", newPath));
 
 			//define new File object, and check if null
@@ -152,11 +172,25 @@ class Proxy {
 			RandomAccessFile currRaf = currCustFile.getRaf();
 
 
-			//close connection
+
+			//write back to server and close RandomAccessFile
 			if (!currCustFile.isDirectory() && currRaf != null){
 
 				try{
-					currRaf.close();
+					if (currCustFile.modified){
+						currCustFile.data = new byte[(int) currFile.length()];
+						currRaf.seek(0);
+						currRaf.read(currCustFile.data);
+						currRaf.close();
+						currCustFile.raf = null;
+						server.close(currCustFile);
+						
+					}
+					else
+					{
+						currRaf.close();
+						currCustFile.raf = null;
+					}
 				}
 				catch(IOException e){
 					System.err.println("Error: IOException caught when attempting to close raf");
@@ -185,6 +219,7 @@ class Proxy {
 
 			//get custFile associated with fd
 			custFile currCustFile = fdMap.get(fd);
+			currCustFile.modified = true;
 			File currFile = currCustFile.getFile();
 
 			//check permissions

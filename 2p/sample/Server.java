@@ -13,7 +13,49 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		super(port);
 	}
 
-	public custFile open(custFile cFile){
+	public void close(custFile cFile) throws RemoteException{
+		String newPathname = root + cFile.pathname;
+		File file = new File (newPathname);
+		System.err.println(String.format("Close called for file with path: %s", newPathname));
+		try {
+			file.delete();
+		}
+		catch (SecurityException e){
+			e.printStackTrace();
+		}
+
+		try {
+			file.createNewFile();
+		}
+		catch (IOException e){
+			e.printStackTrace();
+		}
+		
+		
+		if (cFile.data == null || cFile.data.length == 0){
+			System.err.println("data is null or has length 0");
+			return;
+		}
+
+		try {
+			RandomAccessFile raf = new RandomAccessFile(file, "rw");
+			raf.write(cFile.data);
+			raf.close();
+		}
+		catch (FileNotFoundException e){
+			e.printStackTrace();
+		}
+		catch (IOException e){
+			e.printStackTrace();
+		}
+
+		return;
+		
+		
+		
+	}
+
+	public custFile open(custFile cFile) throws RemoteException{
 		File file = new File(root + cFile.pathname);
 		System.err.println(String.format("Open called for file with path: %s", root + cFile.pathname));
 		cFile.doesExist = file.exists();
