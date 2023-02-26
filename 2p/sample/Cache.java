@@ -11,10 +11,14 @@ class Cache {
 	
 	private String root;
 	private fileServerIntf server;
+	private long maxSize;
+	private long currSize;
 
-	public Cache (String root, fileServerIntf server){
+	public Cache (String root, fileServerIntf server, long maxSize){
 		this.root = root;
 		this.server = server;
+		this.maxSize = maxSize;
+		currSize = 0;
 	}
 
 	public void close(custFile currCustFile){
@@ -29,14 +33,17 @@ class Cache {
 			currCacheFile.readOnly = true;
 			Iterator keys = cacheMap.keySet().iterator();
 			while (keys.hasNext()){
-				System.err.println("Loop");
 				String nextKey = (String) keys.next();
 				CacheFile nextCacheFile = cacheMap.get(nextKey);
 				if (nextCacheFile.readOnly && nextCacheFile.pathname.startsWith(currCustFile.adjPathname) && nextCacheFile.refCount == 0 && nextCacheFile.version < currVersion){
 					System.err.println(String.format("Deleting old readOnly version: %s", nextCacheFile.pathname));
 					File file = new File(root + "/" + nextCacheFile.pathname);
+					long fileSize = file.length();
 					if (!file.delete()){
 						System.err.println("Failed to delete file");
+					}
+					else{
+						updateSize(-1*fileSize);
 					}
 					//collect hash set of keys which need to be deleted from cache
 					toDelete.add(nextKey);
@@ -51,6 +58,7 @@ class Cache {
 			}
 		}
 		else{
+
 			currCacheFile.refCount -= 1;
 		}
 
@@ -60,7 +68,7 @@ class Cache {
 
 	public String query(String pathname, String mode, custFile cFile){
 		System.err.println(String.format("Querying cache for with pathname: %s", pathname));
-		boolean readOnly = (mode == "w");
+		boolean readOnly = (mode == "r");
 		Path path = Paths.get(pathname);
 		Path normalPath = path.normalize();
 		String adjPath = normalPath.toString().replaceAll("/", "#@#");
@@ -85,7 +93,7 @@ class Cache {
 
 		
 		if (recentCacheFile == null){
-
+			// File is not in cache
 			System.err.println(String.format("Cache miss on pathname: %s. Checking server", pathname));
 			try{
 				cFile = server.open(cFile);
@@ -99,10 +107,25 @@ class Cache {
 				return null;
 			}
 
-			if (!cFile.exists() || cFile.isDirectory()){
-				if (!cFile.exists()){
-					System.err.println("file does not exist on server side");
+			if (!cFile.exists()){
+				// File doesn't exist on server side, must create a new one and add to the cache
+				System.err.println("file does not exist on server side");
+				String finalPath = newPathname + "_NEW";
+				CacheFile newCacheFile = new CacheFile(finalPath, openedTime, readOnly);
+				newCacheFile.refCount += 1;
+				File file = new File(root + "/" + finalPath);
+				try{
+					file.createNewFile();
 				}
+				catch (Exception e){
+					e.printStackTrace();
+					return null;
+				}
+				cacheMap.put(finalPath, newCacheFile);
+				return finalPath;
+			}
+
+			if (cFile.isDirectory()){
 				if (cFile.isDirectory()){
 					System.err.println("file is directory on server side");
 				}
@@ -116,6 +139,7 @@ class Cache {
 				file.createNewFile();
 				RandomAccessFile raf = new RandomAccessFile(file, "rw");
 				raf.write(cFile.data);
+				updateSize(file.length());
 			}
 			catch (IOException e){
 				e.printStackTrace();
@@ -141,12 +165,15 @@ class Cache {
 
 		CacheFile newCacheFile = new CacheFile(newPathname, openedTime, false);
 		newCacheFile.refCount += 1;
+
 		
 		//Copy recentCacheFile's file to new file, return path to that new file
 		Path origPath = Paths.get(root + "/" + recentCacheFile.pathname);
 		Path copyPath = Paths.get(root + "/" + newPathname);
+		File newFile = new File(root + "/" + newPathname);
 		try{
 			Files.copy(origPath, copyPath, StandardCopyOption.REPLACE_EXISTING);
+			updateSize(newFile.length());
 		}
 		catch (IOException e){
 			e.printStackTrace();
@@ -159,6 +186,16 @@ class Cache {
 
 
 		return newPathname;
+	}
+
+	public void updateSize(long delta){
+		System.err.println(String.format("Updating current size of cache (%d) by %d", currSize, delta));
+		currSize += delta;
+
+		System.err.println(String.format("New size: %d", currSize));
+		
+		//add LRU eviction logic here
+
 	}
 
 }

@@ -6,6 +6,7 @@ class CacheFile {
 	public boolean readOnly;
 	public String pathname;
 	public int refCount;
+	public long size;
 
 	public CacheFile(String pathname, long version, boolean readOnly){
 			this.pathname = pathname;

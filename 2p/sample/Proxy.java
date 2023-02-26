@@ -207,7 +207,6 @@ class Proxy {
 					throw e;
 				}
 				
-				cache.close(currCustFile);
 				
 			}
 
@@ -247,9 +246,9 @@ class Proxy {
 				return Errors.ENOENT;
 			}
 
+			long origSize = currFile.length();
 			RandomAccessFile currRaf = currCustFile.getRaf();
-			try {
-			
+			try {	
 				currRaf.write(buf);
 			}
 			catch (IOException e){
@@ -259,6 +258,7 @@ class Proxy {
 			}
 
 			System.err.println(String.format("Wrote %d bytes", buf.length));
+			cache.updateSize(currFile.length() - origSize);
 
 			return buf.length;
 		}
@@ -444,6 +444,7 @@ class Proxy {
 
 	public static void main(String[] args) throws IOException {
 		cacheDir = args[2];
+		int cacheSize = Integer.parseInt(args[3]);
 
 		try {
 			Registry registry = LocateRegistry.getRegistry(args[0], Integer.parseInt(args[1]));
@@ -452,7 +453,8 @@ class Proxy {
 		catch (Exception e){
 			e.printStackTrace();
 		}
-		cache = new Cache(cacheDir, server);
+
+		cache = new Cache(cacheDir, server, cacheSize);
 		(new RPCreceiver(new FileHandlingFactory())).run();
 	}
 }
