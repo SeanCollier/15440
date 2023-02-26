@@ -8,9 +8,16 @@ import java.util.*;
 public class Server extends UnicastRemoteObject implements fileServerIntf {
 
 	public String root;
+	public long defaultVersionOnMiss = 1;
+	public HashMap<String, Long> versionMap = new HashMap<String, Long>();
 
 	public Server(int port) throws RemoteException {
 		super(port);
+	}
+
+	public long checkVersion(String pathname) throws RemoteException{
+		pathname = root + pathname;
+		return versionMap.getOrDefault(pathname, defaultVersionOnMiss);
 	}
 
 	public void close(custFile cFile) throws RemoteException{
@@ -31,7 +38,14 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 			e.printStackTrace();
 		}
 		
-		
+		//update version in versionMap
+
+		System.err.println(String.format("Current version of file: %d", versionMap.getOrDefault(newPathname, defaultVersionOnMiss)));
+		versionMap.put(newPathname, cFile.version);
+
+		System.err.println(String.format("New version of file: %d", versionMap.get(newPathname)));
+
+
 		if (cFile.data == null || cFile.data.length == 0){
 			System.err.println("data is null or has length 0");
 			return;
@@ -49,9 +63,8 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 			e.printStackTrace();
 		}
 
-		return;
-		
-		
+
+		return;		
 		
 	}
 
@@ -60,6 +73,7 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		System.err.println(String.format("Open called for file with path: %s", root + cFile.pathname));
 		cFile.doesExist = file.exists();
 		cFile.isDir = file.isDirectory();
+		cFile.version = versionMap.getOrDefault(root+cFile.pathname, defaultVersionOnMiss);
 
 		if (cFile.isDir || !cFile.doesExist){
 			if (!file.exists()){

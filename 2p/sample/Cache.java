@@ -28,6 +28,7 @@ class Cache {
 		CacheFile currCacheFile = cacheMap.get(pathname);
 		long currVersion = currCacheFile.version;
 		Set toDelete = new HashSet<String>();
+
 		//remove previous read only versions from cache if refcount = 0
 		if (!currCacheFile.readOnly){
 			currCacheFile.readOnly = true;
@@ -35,6 +36,16 @@ class Cache {
 			while (keys.hasNext()){
 				String nextKey = (String) keys.next();
 				CacheFile nextCacheFile = cacheMap.get(nextKey);
+				/*
+				System.err.println("____________________________");
+				System.err.println(nextCacheFile.pathname);
+				System.err.println(nextCacheFile.readOnly);
+				System.err.println(nextCacheFile.pathname.startsWith(currCustFile.adjPathname));
+				System.err.println(nextCacheFile.refCount);
+				System.err.println(nextCacheFile.version < currVersion);
+				System.err.println(nextCacheFile.version);
+				System.err.println(currVersion);
+				*/
 				if (nextCacheFile.readOnly && nextCacheFile.pathname.startsWith(currCustFile.adjPathname) && nextCacheFile.refCount == 0 && nextCacheFile.version < currVersion){
 					System.err.println(String.format("Deleting old readOnly version: %s", nextCacheFile.pathname));
 					File file = new File(root + "/" + nextCacheFile.pathname);
@@ -57,10 +68,7 @@ class Cache {
 				cacheMap.remove(key);
 			}
 		}
-		else{
-
-			currCacheFile.refCount -= 1;
-		}
+		currCacheFile.refCount -= 1;
 
 		
 
@@ -90,11 +98,27 @@ class Cache {
 			}
 		}
 
+		long serverVersion = -100;
 
+		try {
+			serverVersion = server.checkVersion(cFile.pathname);
+		}
+		catch (Exception e){
+			e.printStackTrace();
+			return null;
+		}	
 		
-		if (recentCacheFile == null){
-			// File is not in cache
-			System.err.println(String.format("Cache miss on pathname: %s. Checking server", pathname));
+		if (recentCacheFile == null || serverVersion != mostRecentVersion){
+			// File is not in cachem or cached version is out of date
+			if (recentCacheFile == null){
+				System.err.println(String.format("Cache miss on pathname: %s. Checking server", pathname));
+			}
+			
+			else if (serverVersion != mostRecentVersion)  {
+				System.err.println(String.format("Cache version (%d) is not up to date with server version (%d).", mostRecentVersion, serverVersion));
+				mostRecentVersion = serverVersion;
+			}
+
 			try{
 				cFile = server.open(cFile);
 			}
@@ -122,8 +146,10 @@ class Cache {
 					return null;
 				}
 				cacheMap.put(finalPath, newCacheFile);
+				cFile.version = openedTime;
 				return finalPath;
 			}
+
 
 			if (cFile.isDirectory()){
 				if (cFile.isDirectory()){
@@ -132,7 +158,7 @@ class Cache {
 				return newPathname;
 			}
 
-			recentCacheFile = new CacheFile(newPathname + "_FETCHED", openedTime-1, true);
+			recentCacheFile = new CacheFile(newPathname + "_FETCHED", serverVersion, true);
 			File file = new File(root + "/" + newPathname+"_FETCHED");
 			cacheMap.put(newPathname+"_FETCHED",recentCacheFile);
 			try {
@@ -156,6 +182,7 @@ class Cache {
 		//file was in cache, or was fetched from server
 		//now have found the most recent read-only version. If mode is not readOnly, then must make a copy
 		if (readOnly){
+			cFile.version = recentCacheFile.version;
 			recentCacheFile.refCount += 1;
 			System.err.println("Is read only, returning");
 			return recentCacheFile.pathname;
@@ -164,8 +191,8 @@ class Cache {
 		//custFile is not read only. Must copy data from most recent read-only file to new writable file
 
 		CacheFile newCacheFile = new CacheFile(newPathname, openedTime, false);
+		cFile.version = openedTime;
 		newCacheFile.refCount += 1;
-
 		
 		//Copy recentCacheFile's file to new file, return path to that new file
 		Path origPath = Paths.get(root + "/" + recentCacheFile.pathname);
