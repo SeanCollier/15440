@@ -4,9 +4,8 @@ import java.util.*;
 public class custFile implements Serializable{
 	
 	private File jFile;
-	private String mode;
 
-
+	public String mode;
 	public RandomAccessFile raf = null;
 	public boolean isDir;
 	public boolean doesExist;
@@ -17,8 +16,8 @@ public class custFile implements Serializable{
 	public boolean modified = false;
 	public String cacheFilePath;
 	public String adjPathname;
+	public String returnPath;
 	public long version;
-	
 
 
 	public custFile(String pathname, String newMode){

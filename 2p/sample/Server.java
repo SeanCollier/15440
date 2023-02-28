@@ -41,27 +41,10 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		//update version in versionMap
 
 		System.err.println(String.format("Current version of file: %d", versionMap.getOrDefault(newPathname, defaultVersionOnMiss)));
+		System.err.println(String.format("cFile version is: %d", cFile.version));
 		versionMap.put(newPathname, cFile.version);
 
-		System.err.println(String.format("New version of file: %d", versionMap.get(newPathname)));
-
-
-		if (cFile.data == null || cFile.data.length == 0){
-			System.err.println("data is null or has length 0");
-			return;
-		}
-
-		try {
-			RandomAccessFile raf = new RandomAccessFile(file, "rw");
-			raf.write(cFile.data);
-			raf.close();
-		}
-		catch (FileNotFoundException e){
-			e.printStackTrace();
-		}
-		catch (IOException e){
-			e.printStackTrace();
-		}
+		System.err.println(String.format("New version of file: %d", versionMap.get(newPathname)));	
 
 
 		return;		
@@ -74,6 +57,7 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		cFile.doesExist = file.exists();
 		cFile.isDir = file.isDirectory();
 		cFile.version = versionMap.getOrDefault(root+cFile.pathname, defaultVersionOnMiss);
+		cFile.length = file.length();
 
 		if (cFile.isDir || !cFile.doesExist){
 			if (!file.exists()){
@@ -84,32 +68,67 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 			}
 			return cFile;
 		}
+		return cFile;
+	}
 
-		//read contents of file into custFile data buffer
+	public void chunkWrite(custFile cFile) {
+	//	System.err.println(String.format("Writing in chunks to pathname: %s", cFile.pathname));
+		try {
+			File file = new File(root + "/" + cFile.pathname);
+			RandomAccessFile raf = new RandomAccessFile(file, "rw");
+			raf.seek(file.length());	
+			raf.write(cFile.data);
+			raf.close();
+			
+		}
+		catch (Exception e){
+			e.printStackTrace();
+			return;
+		}	
+	}
+	
+	public custFile chunkRead(custFile cFile,long offset, long chunkSize) throws RemoteException {
+
+	//	System.err.println(String.format("chunkRead called with pathname: %s and offset: %d", cFile.pathname, offset));
+		
+		File file = new File(root + cFile.pathname);
+		
+		if (offset >= file.length()){
+			System.err.println("Offset greater than file length. Returning");
+			return cFile;
+		}
 
 		try{
 			RandomAccessFile raf = new RandomAccessFile(file, "rw");
-			cFile.length = raf.length();
-			byte[] data = new byte[(int) raf.length()];
-			raf.read(data);
-			cFile.data = data;
+			long bytesToRead = Long.min(chunkSize, file.length()-offset);
+			cFile.data = new byte[(int)bytesToRead];
+	//		System.err.println(String.format("Reading %d bytes in this chunk", bytesToRead));
+			raf.seek(offset);
+			raf.read(cFile.data, 0, (int)bytesToRead);
+			if (cFile.data == null){
+				System.err.println("cFile.data is null");
+			}
 		}
 		catch (FileNotFoundException e){
+			System.err.println("FileNotFoundException");
 			cFile.error = "FileNotFound";
 			e.printStackTrace();
 			return cFile;
 		}
 		catch (SecurityException e){
+			System.err.println("SecurityException");
 			cFile.error = "Security";
 			e.printStackTrace();
 			return cFile;
 		}
 		catch (IllegalArgumentException e){
+			System.err.println("IllegalArgumentException");
 			cFile.error = "IllegalArgument";
 			e.printStackTrace();
 			return cFile;
 		}
 		catch (IOException e){
+			System.err.println("IOException");
 			cFile.error = "IO";
 			e.printStackTrace();
 			return cFile;

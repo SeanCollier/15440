@@ -10,12 +10,14 @@ class Proxy {
 	public static String cacheDir;
 	public static Cache cache;
 	public static fileServerIntf server;
+	private static long chunkSize = 3;
 
 
 	private static class FileHandler implements FileHandling {	
 
 		private HashMap<Integer, custFile> fdMap = new HashMap<Integer, custFile>();
 		private int fdCounter = 0;
+
 
 		public int open( String path, OpenOption o ) {
 			System.err.println(String.format("##### Open Called with Pathname: %s", path));
@@ -38,10 +40,17 @@ class Proxy {
 			newCustFile = new custFile(path, mode);
 
 			//query cache for file
-			String pathInCache = cache.query(path, mode, newCustFile);
+			newCustFile = cache.query(path, mode, newCustFile);
+			newCustFile.mode = mode;
+			newCustFile.pathname = path;
+			String pathInCache = newCustFile.returnPath;
 			String newPath = cacheDir + "/" + pathInCache;
 			newCustFile.cacheFilePath = pathInCache;
+			
+			System.err.println(String.format("New pathname after querying cache: %s", newPath));
+			System.err.println(String.format("Version number after querying cache: %d", newCustFile.version));
 
+			//handle errors based on error message given by server
 			if (newCustFile.error != null){
 				switch(newCustFile.error){
 					case "FileNotFound":
@@ -62,8 +71,7 @@ class Proxy {
 						
 				}
 			}
-			System.err.println(String.format("New pathname after querying cache: %s", newPath));
-
+			
 			//define new File object, and check if null
 			File newFile = new File(newPath);
 			if (newFile == null){
@@ -181,12 +189,11 @@ class Proxy {
 
 				try{
 					if (currCustFile.modified){
-						currCustFile.data = new byte[(int) currFile.length()];
-						currRaf.seek(0);
-						currRaf.read(currCustFile.data);
 						currRaf.close();
 						currCustFile.raf = null;
+						System.out.println(String.format("Version of currCustFile is: %d", currCustFile.version));
 						server.close(currCustFile);
+						writeToServerInChunks(currCustFile);
 						
 					}
 					else
@@ -204,8 +211,11 @@ class Proxy {
 				catch(NullPointerException e){
 					e.printStackTrace();
 					System.err.println("Error: NPE caught on close");
-					throw e;
 				}
+				catch (Exception e){
+					e.printStackTrace();
+				}
+
 				
 				
 			}
@@ -215,6 +225,24 @@ class Proxy {
 			fdMap.remove(fd);
 
 			return 0;
+		}
+
+		private void writeToServerInChunks(custFile cFile) throws IOException, SecurityException, RemoteException{
+			System.err.println("Writing in chunks");
+			String cachePathname = cacheDir + "/" + cFile.cacheFilePath;
+			File file = new File(cachePathname);
+			RandomAccessFile raf = new RandomAccessFile(file, "rw");
+			cFile.length = file.length();
+			System.err.println(String.format("Total length: %d", file.length()));
+			long offset = 0;
+			while (offset < file.length()){
+				long bytesToRead = Long.min(chunkSize, file.length()-offset);
+				cFile.data = new byte[(int)bytesToRead];
+				raf.seek(offset);
+				raf.read(cFile.data, 0, (int)bytesToRead);
+				server.chunkWrite(cFile);
+				offset += bytesToRead;
+			}
 		}
 
 		public long write( int fd, byte[] buf ) {
@@ -454,7 +482,7 @@ class Proxy {
 			e.printStackTrace();
 		}
 
-		cache = new Cache(cacheDir, server, cacheSize);
+		cache = new Cache(cacheDir, server, cacheSize, chunkSize);
 		(new RPCreceiver(new FileHandlingFactory())).run();
 	}
 }

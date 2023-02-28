@@ -13,12 +13,14 @@ class Cache {
 	private fileServerIntf server;
 	private long maxSize;
 	private long currSize;
+	private long chunkSize;
 
-	public Cache (String root, fileServerIntf server, long maxSize){
+	public Cache (String root, fileServerIntf server, long maxSize, long chunkSize){
 		this.root = root;
 		this.server = server;
 		this.maxSize = maxSize;
 		currSize = 0;
+		this.chunkSize = chunkSize;
 	}
 
 	public void close(custFile currCustFile){
@@ -74,7 +76,7 @@ class Cache {
 
 	}
 
-	public String query(String pathname, String mode, custFile cFile){
+	public custFile query(String pathname, String mode, custFile cFile){
 		System.err.println(String.format("Querying cache for with pathname: %s", pathname));
 		boolean readOnly = (mode == "r");
 		Path path = Paths.get(pathname);
@@ -109,7 +111,7 @@ class Cache {
 		}	
 		
 		if (recentCacheFile == null || serverVersion != mostRecentVersion){
-			// File is not in cachem or cached version is out of date
+			// File is not in cache or cached version is out of date
 			if (recentCacheFile == null){
 				System.err.println(String.format("Cache miss on pathname: %s. Checking server", pathname));
 			}
@@ -124,12 +126,7 @@ class Cache {
 			}
 			catch (RemoteException e){
 				e.printStackTrace();
-			}
-
-
-			if (cFile.error != null){
-				return null;
-			}
+			}	
 
 			if (!cFile.exists()){
 				// File doesn't exist on server side, must create a new one and add to the cache
@@ -147,7 +144,9 @@ class Cache {
 				}
 				cacheMap.put(finalPath, newCacheFile);
 				cFile.version = openedTime;
-				return finalPath;
+				System.err.println(String.format("cFile version is %d", openedTime));
+				cFile.returnPath = finalPath;
+				return cFile;
 			}
 
 
@@ -155,7 +154,8 @@ class Cache {
 				if (cFile.isDirectory()){
 					System.err.println("file is directory on server side");
 				}
-				return newPathname;
+				cFile.returnPath = newPathname;
+				return cFile;
 			}
 
 			recentCacheFile = new CacheFile(newPathname + "_FETCHED", serverVersion, true);
@@ -163,8 +163,10 @@ class Cache {
 			cacheMap.put(newPathname+"_FETCHED",recentCacheFile);
 			try {
 				file.createNewFile();
-				RandomAccessFile raf = new RandomAccessFile(file, "rw");
-				raf.write(cFile.data);
+				getFileInChunks(cFile, file);
+				if (cFile.error != null){
+					return null;
+				}
 				updateSize(file.length());
 			}
 			catch (IOException e){
@@ -175,7 +177,14 @@ class Cache {
 				e.printStackTrace();
 				return null;
 			}
+			catch (Exception e){
+				e.printStackTrace();
+				return null;
+			}
 		}
+
+
+		System.err.println("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 
 
 
@@ -185,13 +194,15 @@ class Cache {
 			cFile.version = recentCacheFile.version;
 			recentCacheFile.refCount += 1;
 			System.err.println("Is read only, returning");
-			return recentCacheFile.pathname;
+			cFile.returnPath = recentCacheFile.pathname;
+			return cFile;
 		}
 
 		//custFile is not read only. Must copy data from most recent read-only file to new writable file
 
 		CacheFile newCacheFile = new CacheFile(newPathname, openedTime, false);
 		cFile.version = openedTime;
+		System.err.println(String.format("cFile.version has been set to: %d", cFile.version));
 		newCacheFile.refCount += 1;
 		
 		//Copy recentCacheFile's file to new file, return path to that new file
@@ -211,8 +222,26 @@ class Cache {
 		//Place newCacheFile in cache
 		cacheMap.put(newPathname, newCacheFile);
 
+		System.err.println(String.format("cFile version on return: %d", cFile.version));
+		cFile.returnPath = newPathname;
 
-		return newPathname;
+		return cFile;
+	}
+
+	public void getFileInChunks(custFile cFile, File file) throws IOException, SecurityException, RemoteException{
+		System.err.println("Getting file in chunks");
+		long offset = 0;
+		RandomAccessFile raf = new RandomAccessFile(file, "rw");
+		while (offset < cFile.length){
+			cFile = server.chunkRead(cFile, offset, chunkSize);
+			if (cFile.error != null){
+				return;
+			}
+			raf.seek(file.length());
+			raf.write(cFile.data);
+			offset = file.length();
+		}
+		raf.close();
 	}
 
 	public void updateSize(long delta){
