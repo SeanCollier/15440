@@ -10,7 +10,7 @@ class Proxy {
 	public static String cacheDir;
 	public static Cache cache;
 	public static fileServerIntf server;
-	private static long chunkSize = 3;
+	private static long chunkSize = 250000;
 
 
 	private static class FileHandler implements FileHandling {	
@@ -192,7 +192,6 @@ class Proxy {
 						currRaf.close();
 						currCustFile.raf = null;
 						System.out.println(String.format("Version of currCustFile is: %d", currCustFile.version));
-						server.close(currCustFile);
 						writeToServerInChunks(currCustFile);
 						
 					}
@@ -235,12 +234,14 @@ class Proxy {
 			cFile.length = file.length();
 			System.err.println(String.format("Total length: %d", file.length()));
 			long offset = 0;
-			while (offset < file.length()){
+			boolean firstIteration = true;
+			while (offset <= file.length()){
 				long bytesToRead = Long.min(chunkSize, file.length()-offset);
 				cFile.data = new byte[(int)bytesToRead];
 				raf.seek(offset);
 				raf.read(cFile.data, 0, (int)bytesToRead);
-				server.chunkWrite(cFile);
+				server.chunkWrite(cFile, firstIteration);
+				firstIteration = false;
 				offset += bytesToRead;
 			}
 		}

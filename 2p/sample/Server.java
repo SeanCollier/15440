@@ -20,7 +20,7 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		return versionMap.getOrDefault(pathname, defaultVersionOnMiss);
 	}
 
-	public void close(custFile cFile) throws RemoteException{
+	public void close(custFile cFile){
 		String newPathname = root + cFile.pathname;
 		File file = new File (newPathname);
 		System.err.println(String.format("Close called for file with path: %s", newPathname));
@@ -51,7 +51,7 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		
 	}
 
-	public custFile open(custFile cFile) throws RemoteException{
+	public custFile open(custFile cFile, long chunkSize) throws RemoteException{
 		File file = new File(root + cFile.pathname);
 		System.err.println(String.format("Open called for file with path: %s", root + cFile.pathname));
 		cFile.doesExist = file.exists();
@@ -68,11 +68,17 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 			}
 			return cFile;
 		}
+
+		chunkRead(cFile, 0, chunkSize);
+
 		return cFile;
 	}
 
-	public void chunkWrite(custFile cFile) {
+	public void chunkWrite(custFile cFile, boolean firstIteration) {
 	//	System.err.println(String.format("Writing in chunks to pathname: %s", cFile.pathname));
+		if (firstIteration){
+			close(cFile);
+		}
 		try {
 			File file = new File(root + "/" + cFile.pathname);
 			RandomAccessFile raf = new RandomAccessFile(file, "rw");
@@ -94,7 +100,7 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		File file = new File(root + cFile.pathname);
 		
 		if (offset >= file.length()){
-			System.err.println("Offset greater than file length. Returning");
+			System.err.println(String.format("Offset (%d) greater than or equal to file length (%d). Returning", offset, file.length()));
 			return cFile;
 		}
 

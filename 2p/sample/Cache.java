@@ -122,9 +122,9 @@ class Cache {
 			}
 
 			try{
-				cFile = server.open(cFile);
+				cFile = server.open(cFile, chunkSize);
 			}
-			catch (RemoteException e){
+			catch (Exception e){
 				e.printStackTrace();
 			}	
 
@@ -163,7 +163,7 @@ class Cache {
 			cacheMap.put(newPathname+"_FETCHED",recentCacheFile);
 			try {
 				file.createNewFile();
-				getFileInChunks(cFile, file);
+				getFileInChunks(cFile, file);	
 				if (cFile.error != null){
 					return null;
 				}
@@ -230,9 +230,11 @@ class Cache {
 
 	public void getFileInChunks(custFile cFile, File file) throws IOException, SecurityException, RemoteException{
 		System.err.println("Getting file in chunks");
-		long offset = 0;
+		long offset = chunkSize;
 		RandomAccessFile raf = new RandomAccessFile(file, "rw");
-		while (offset < cFile.length){
+		raf.write(cFile.data);
+		while (offset <= cFile.length){
+			System.err.println(String.format("offset: %d, file length: %d", offset, cFile.length));
 			cFile = server.chunkRead(cFile, offset, chunkSize);
 			if (cFile.error != null){
 				return;
