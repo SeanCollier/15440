@@ -5,6 +5,10 @@ import java.lang.System.*;
 import java.rmi.RemoteException;
 import java.rmi.*;
 
+/*
+	The Cache class is used to act as a local cache for files which are fetched from a server. This allows RPC calls on a file system to be made without having to constantly fetch directly from the server
+*/
+
 class Cache {	
 
 	public LinkedHashMap<String, CacheFile> cacheMap = new LinkedHashMap<String, CacheFile>(16, 0.75f, true);
@@ -15,6 +19,10 @@ class Cache {
 	private long currSize;
 	private long chunkSize;
 
+	/*
+		[description]: Constructor for Cache class
+		[in]: root (root directory to write cached files to), server (server to fetch files from), maxSize (maximum cache size, enforced by LRU replacement), chunkSize (size of chunks to read files from the server in)
+	*/
 	public Cache (String root, fileServerIntf server, long maxSize, long chunkSize){
 		this.root = root;
 		this.server = server;
@@ -23,6 +31,10 @@ class Cache {
 		this.chunkSize = chunkSize;
 	}
 
+	/*
+		[description]: converts currCustFile to readOnly, deletes old readOnly files, and reduces currCustFile's refCount
+		[in]: currCustFile (custFile object which contains information on the file being closed
+	*/
 	public void close(custFile currCustFile){
 		//convert cacheFile corresponding to the custFile to write-only version
 		System.err.println(String.format("Close called on cache for pathname: %s", currCustFile.cacheFilePath));
@@ -70,6 +82,9 @@ class Cache {
 
 	}
 
+	/*
+		[description]: prints all elements in the cache at a given time, used for debugging
+	*/
 	public void printHashMap(){
 		Iterator values = cacheMap.values().iterator();
 		System.err.println("-------------- PRINTING CACHE -----------------");
@@ -80,6 +95,10 @@ class Cache {
 		System.err.println("-----------------------------------------------");
 	}
 
+	/*
+		[description]: deletes stale files (old readOnly files which will have been made useless by a newer readOnly version of the same file)
+		[in]: pathname (pathname of file for which to search for and delete stale versions)
+	*/
 	public void deleteStaleFiles(String pathname){
 		System.err.println(String.format("Deleting stale files for %s", pathname));
 		Iterator values2 = cacheMap.values().iterator();
@@ -102,6 +121,11 @@ class Cache {
 		}
 	}
 
+	/*
+		[description]: queries the cache for the file with the given pathname. Fetches file from server if need be
+		[in]: pathname (name of file which the user wants), mode (mode used to open file), cFile (custFile object which contains information about the requested file)
+		[out]: custFile containing extra information about the requested file, including the path where it exists in the cache
+	*/
 	public custFile query(String pathname, String mode, custFile cFile){
 		System.err.println(String.format("Querying cache for with pathname: %s", pathname));
 		boolean readOnly = (mode == "r");
@@ -221,7 +245,6 @@ class Cache {
 		}
 
 
-		System.err.println("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 
 
 
@@ -265,6 +288,10 @@ class Cache {
 		return cFile;
 	}
 
+	/*
+		[description]: reads the file associated with cFile in chunks from the server
+		[in]: cFile (custFile containing information about the file which is needed), file (File object which references the file to be read)
+	*/
 	public void getFileInChunks(custFile cFile, File file) throws IOException, SecurityException, RemoteException{
 		System.err.println("Getting file in chunks");
 		long offset = chunkSize;
@@ -283,6 +310,10 @@ class Cache {
 		raf.close();
 	}
 
+	/*
+		[description]: updates the current size of the files stored in the cache
+		[in]: delta (value to add to the current size)
+	*/
 	public void updateSize(long delta){
 		System.err.println(String.format("Updating current size of cache (%d) by %d", currSize, delta));
 		currSize += delta;
@@ -296,6 +327,9 @@ class Cache {
 
 	}
 
+	/*
+		[description]: evicts an element from the cache according to LRU
+	*/
 	//evicts element according to LRU
 	public void LRUEvict(){
 		System.err.println("LRU Evicting an element");

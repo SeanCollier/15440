@@ -27,11 +27,12 @@ class Proxy {
 
 
 		/*
+			[description]: associates a file descriptor with the file on the server at the given path
 			[in]:
 				path (pathname on the server which the client wants to open)
 				o (OpenOption which describes the mode with which to open the file
 			[out]: 
-				integer return value, faithful to open in c
+				file descriptor assigned to file on success, proper error code on error
 		*/
 		public int open( String path, OpenOption o ) {
 			System.err.println(String.format("##### Open Called with Pathname: %s", path));
@@ -161,11 +162,7 @@ class Proxy {
 						}
 						return Errors.ENOENT;
 					}
-					/*
-					if (newFile.isDirectory()){
-						System.err.println("Error: Open called with READ on directory");
-						return Errors.EISDIR;
-					}*/
+					
 					break;
 				
 			}
@@ -201,6 +198,12 @@ class Proxy {
 			System.err.println(String.format("Returning fd (%d) to client", fd));
 			return fd;
 		}
+
+		/*
+			[description]: closes file at the given fd, removing it from the fdMap
+			[in]: fd (fd of file to close)
+			[out]: 0 on success, proper error code on error
+		*/
 
 		public int close( int fd ) {
 			System.err.println(String.format("####### Close called for fd %d", fd));
@@ -257,7 +260,11 @@ class Proxy {
 
 			return 0;
 		}
-
+		
+		/*
+			[description]: writes contents of file associated with cFile to the server in chunks of chunkSize
+			[in]: cFile (custFile which contains information on the file which is being written to the server
+		*/
 		private void writeToServerInChunks(custFile cFile) throws IOException, SecurityException, RemoteException{
 			System.err.println("Writing in chunks");
 			String cachePathname = cacheDir + "/" + cFile.cacheFilePath;
@@ -277,7 +284,12 @@ class Proxy {
 				offset += bytesToRead;
 			}
 		}
-
+		
+		/*
+			[description]: writes the data from buf to the file associated with the given fd
+			[in]: fd (file descriptor of file to write to), buf (array of bytes to write to file)
+			[out]: # of bytes written on success, proper error code on error
+		*/
 		public long write( int fd, byte[] buf ) {
 			System.err.println(String.format("####### Write called for fd %d", fd)); 
 			if (!fdMap.containsKey(fd)){
@@ -324,7 +336,12 @@ class Proxy {
 
 			return buf.length;
 		}
-
+	
+		/*
+			[description]: reads data from file associated with fd to buf
+			[in]: fd (file descriptor of file to read from), buf (buffer to write to)
+			[out]: # of bytes read on success, proper error code on error
+		*/
 		public long read( int fd, byte[] buf ) {
 			System.err.println(String.format("####### Read called on fd %d", fd));
 			if (!fdMap.containsKey(fd)){
@@ -374,7 +391,12 @@ class Proxy {
 			}
 			return bytesRead;
 		}
-
+		
+		/*	
+			[description]: sets the file offset for the given file
+			[in]: fd (file descriptor of file), pos (position to set offset to), o (LseekOption which describes how to set offset based on pos)
+			[out]: new file offset on success, proper error code on error
+		*/
 		public long lseek( int fd, long pos, LseekOption o ) {
 			System.err.println(String.format("####### lseek called on fd %d", fd));
 			if (!fdMap.containsKey(fd)){
@@ -439,6 +461,12 @@ class Proxy {
 
 		}
 
+
+		/*
+			[description]: removes the file on the server with the given path, if it exists
+			[in]: path (name of path on server to delete)
+			[out]: 0 on success, proper error code on error
+		*/
 		public int unlink( String path ) {
 			System.err.println(String.format("###### Unlink called for path %s", path));
 
@@ -473,12 +501,23 @@ class Proxy {
 			return;
 		}
 
+
+		/*
+			[description]: returns a distinct file descriptor to associate with file called with open
+			[out]: fd
+		*/
 		private int getNewFd(){
 			int retval = fdCounter;
 			fdCounter += 1;
 			System.err.println(String.format("fdCounter is %s", fdCounter));
 			return retval;
 		}
+		
+		/*
+			[description]: converts OpenOption to string representing mode
+			[in]: o (OpenOption open was called with)
+			[out]: mode (String representing mode)
+		*/
 		private String optionToMode(OpenOption o){
 			String mode;
 			System.err.print("Calling optionToMode for ");
@@ -514,7 +553,11 @@ class Proxy {
 			return new FileHandler();
 		}
 	}
-
+	
+		/*
+			description: initializes cache and looks up server
+			[in]: args (arguments passed in on command line)
+		*/
 	public static void main(String[] args) throws IOException {
 		cacheDir = args[2];
 		int cacheSize = Integer.parseInt(args[3]);
