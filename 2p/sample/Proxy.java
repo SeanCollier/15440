@@ -1,4 +1,7 @@
 /* Sample skeleton for proxy */
+/*
+ 	The Proxy class is used to handle all incoming requests from the client, and forward them on to the server when necessary. The proxy also utilizes a cache to handle incoming requests without the need to forward them to the server.
+*/
 
 import java.io.*;
 import java.util.*;
@@ -7,11 +10,15 @@ import java.rmi.registry.*;
 
 class Proxy {
 	
-	public static String cacheDir;
+	publtic String cacheDir;
 	public static Cache cache;
 	public static fileServerIntf server;
 	private static long chunkSize = 250000;
 
+
+	/*
+		FileHandler class is client-specific class for handling requests
+	*/
 
 	private static class FileHandler implements FileHandling {	
 
@@ -19,6 +26,13 @@ class Proxy {
 		private int fdCounter = 0;
 
 
+		/*
+			[in]:
+				path (pathname on the server which the client wants to open)
+				o (OpenOption which describes the mode with which to open the file
+			[out]: 
+				integer return value, faithful to open in c
+		*/
 		public int open( String path, OpenOption o ) {
 			System.err.println(String.format("##### Open Called with Pathname: %s", path));
 
@@ -87,8 +101,14 @@ class Proxy {
 						System.err.println("Error: Open called with CREATE_NEW on directory");
 						return Errors.EISDIR;
 					}
-					if (newFile.exists()){
+					if (newCustFile.doesExist){
 						System.err.println("Error: Open called with CREATE_NEW on file which already exists");
+						try{
+							newFile.delete();
+						}
+						catch (Exception e){
+							e.printStackTrace();
+						}
 						return Errors.EEXIST;
 					}	
 					try {
@@ -118,15 +138,27 @@ class Proxy {
 						System.err.println("Error: Open called with WRITE on directory");
 						return Errors.EISDIR;
 					}
-					if (!newFile.exists()){
+					if (!newCustFile.exists()){
 						System.err.println("Error: Open called with WRITE on file that doesn't exist");
+						try{
+							newFile.delete();
+						}
+						catch (Exception e){
+							e.printStackTrace();
+						}
 						return Errors.ENOENT;
 					}
 					break;
 				case READ:
 					System.err.println(String.format("newFile path: %s", newFile.getAbsolutePath()));
-					if (!newFile.exists()){
+					if (!newCustFile.exists()){
 						System.err.println("Error: Open called with READ on file that doesn't exist");
+						try{
+							newFile.delete();
+						}
+						catch (Exception e){
+							e.printStackTrace();
+						}
 						return Errors.ENOENT;
 					}
 					/*
@@ -235,7 +267,7 @@ class Proxy {
 			System.err.println(String.format("Total length: %d", file.length()));
 			long offset = 0;
 			boolean firstIteration = true;
-			while (offset <= file.length()){
+			while (offset < file.length()){
 				long bytesToRead = Long.min(chunkSize, file.length()-offset);
 				cFile.data = new byte[(int)bytesToRead];
 				raf.seek(offset);
@@ -288,6 +320,7 @@ class Proxy {
 
 			System.err.println(String.format("Wrote %d bytes", buf.length));
 			cache.updateSize(currFile.length() - origSize);
+			currCustFile.doesExist = true;
 
 			return buf.length;
 		}
@@ -309,8 +342,14 @@ class Proxy {
 				System.err.println("Error: read called on directory");
 				return Errors.EISDIR;
 			}
-			if (!currFile.exists()){
+			if (!currCustFile.exists()){
 				System.err.println(String.format("Error: Read called on File that does not exist with pathname %s", currFile.getAbsolutePath()));
+				try {
+					currFile.delete();	
+				}
+				catch (Exception e){
+					e.printStackTrace();
+				}
 				return Errors.ENOENT;
 			}
 			RandomAccessFile currRaf = currCustFile.getRaf();
@@ -403,25 +442,30 @@ class Proxy {
 		public int unlink( String path ) {
 			System.err.println(String.format("###### Unlink called for path %s", path));
 
-			File currFile = new File(path);
-			if (!currFile.exists()){
-				System.err.println("Error: unlink called on file which does not exist");
-				return Errors.ENOENT;
-			}
-			boolean deleted = false;
+			int response = -4;
+
 			try{
-				deleted = currFile.delete();
+				response = server.unlink(path);
 			}
-			catch (SecurityException e){
+			catch (Exception e){
 				e.printStackTrace();
-				return Errors.EPERM;
 			}
-			if (deleted){
-				return 0;
-			}
-			System.out.println("Error: file not properly deleted");
-			return Errors.EINVAL;
 			
+			switch (response){
+				case 0:
+					return 0;
+				case -1:
+					return Errors.EPERM;
+				case -2:
+					return Errors.ENOENT;
+				case -3:
+					return Errors.EINVAL;
+				default:
+					System.err.println(String.format("retval on unlink: %d", response));
+					return -4;
+			}
+
+						
 			
 		}
 

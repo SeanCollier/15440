@@ -7,7 +7,7 @@ import java.rmi.*;
 
 class Cache {	
 
-	public LinkedHashMap<String, CacheFile> cacheMap = new LinkedHashMap<String, CacheFile>();
+	public LinkedHashMap<String, CacheFile> cacheMap = new LinkedHashMap<String, CacheFile>(16, 0.75f, true);
 	
 	private String root;
 	private fileServerIntf server;
@@ -34,10 +34,11 @@ class Cache {
 		//remove previous read only versions from cache if refcount = 0
 		if (!currCacheFile.readOnly){
 			currCacheFile.readOnly = true;
-			Iterator keys = cacheMap.keySet().iterator();
-			while (keys.hasNext()){
-				String nextKey = (String) keys.next();
-				CacheFile nextCacheFile = cacheMap.get(nextKey);
+			//Iterator keys = cacheMap.keySet().iterator();
+			Iterator values = cacheMap.values().iterator();
+			while (values.hasNext()){
+				//String nextKey = (String) keys.next();
+				CacheFile nextCacheFile = (CacheFile) values.next();
 				/*
 				System.err.println("____________________________");
 				System.err.println(nextCacheFile.pathname);
@@ -57,23 +58,48 @@ class Cache {
 					}
 					else{
 						updateSize(-1*fileSize);
+						values.remove();
+						printHashMap();
 					}
-					//collect hash set of keys which need to be deleted from cache
-					toDelete.add(nextKey);
 				}
-			}
-
-			//delete keys from cache
-			Iterator keysToDelete = toDelete.iterator();
-			while (keysToDelete.hasNext()){
-				String key = (String) keysToDelete.next();
-				cacheMap.remove(key);
-			}
+			}	
 		}
 		currCacheFile.refCount -= 1;
 
 		
 
+	}
+
+	public void printHashMap(){
+		Iterator values = cacheMap.values().iterator();
+		System.err.println("-------------- PRINTING CACHE -----------------");
+		while (values.hasNext()){
+			CacheFile nextCacheFile = (CacheFile) values.next();
+			System.err.println(String.format("--%s--", nextCacheFile.pathname));
+		}
+		System.err.println("-----------------------------------------------");
+	}
+
+	public void deleteStaleFiles(String pathname){
+		System.err.println(String.format("Deleting stale files for %s", pathname));
+		Iterator values2 = cacheMap.values().iterator();
+		while(values2.hasNext()){
+			CacheFile nextCacheFile = (CacheFile) values2.next();
+			if (nextCacheFile.readOnly & nextCacheFile.pathname.startsWith(pathname) && nextCacheFile.refCount == 0){
+				System.err.println(String.format("Deleting %s", nextCacheFile.pathname));
+				File file = new File(root + "/" + nextCacheFile.pathname);
+				long fileSize = file.length();
+				if (!file.delete()){
+					System.err.println("Failed to delete file");
+				}
+				else{
+					updateSize(-1*fileSize);
+					values2.remove();
+					printHashMap();
+			
+				}
+			}
+		}
 	}
 
 	public custFile query(String pathname, String mode, custFile cFile){
@@ -109,6 +135,8 @@ class Cache {
 			e.printStackTrace();
 			return null;
 		}	
+
+		System.err.println(String.format("mostRecentVersion: %d, serverVersion: %d", mostRecentVersion, serverVersion));
 		
 		if (recentCacheFile == null || serverVersion != mostRecentVersion){
 			// File is not in cache or cached version is out of date
@@ -142,6 +170,7 @@ class Cache {
 					e.printStackTrace();
 					return null;
 				}
+				deleteStaleFiles(adjPath);
 				cacheMap.put(finalPath, newCacheFile);
 				cFile.version = openedTime;
 				System.err.println(String.format("cFile version is %d", openedTime));
@@ -156,6 +185,10 @@ class Cache {
 				}
 				cFile.returnPath = newPathname;
 				return cFile;
+			}
+			if (recentCacheFile != null){
+				//local cached version was out of date, must delete stale versions
+				deleteStaleFiles(adjPath);
 			}
 
 			recentCacheFile = new CacheFile(newPathname + "_FETCHED", serverVersion, true);
@@ -181,6 +214,10 @@ class Cache {
 				e.printStackTrace();
 				return null;
 			}
+		}
+		else{
+			System.err.println("Here");
+			cFile.doesExist = true;
 		}
 
 
@@ -253,7 +290,37 @@ class Cache {
 		System.err.println(String.format("New size: %d", currSize));
 		
 		//add LRU eviction logic here
+		if (currSize > maxSize){
+			LRUEvict();
+		}
 
+	}
+
+	//evicts element according to LRU
+	public void LRUEvict(){
+		System.err.println("LRU Evicting an element");
+		Iterator values = cacheMap.values().iterator();
+		long fileSize = 0;
+		while (values.hasNext()){
+			CacheFile nextCacheFile = (CacheFile) values.next();
+			System.err.println(nextCacheFile.pathname);
+			System.err.println(nextCacheFile.readOnly);
+			System.err.println(nextCacheFile.refCount);
+			if (nextCacheFile.readOnly && nextCacheFile.refCount == 0){
+				System.err.println(String.format("Evicting file version: %s", nextCacheFile.pathname));
+				File file = new File(root + "/" + nextCacheFile.pathname);
+				fileSize = file.length();
+				if (!file.delete()){
+					System.err.println("Failed to delete file");
+				}
+				else{
+					values.remove();
+					break;
+				}
+			}
+		}
+		printHashMap();
+		updateSize(-1*fileSize);
 	}
 
 }

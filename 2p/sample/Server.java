@@ -17,6 +17,8 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 
 	public long checkVersion(String pathname) throws RemoteException{
 		pathname = root + pathname;
+		System.err.println(String.format("Checking version for pathname: %s", pathname));
+		System.err.println(String.format("Giving back version: %d", versionMap.getOrDefault(pathname, defaultVersionOnMiss)));
 		return versionMap.getOrDefault(pathname, defaultVersionOnMiss);
 	}
 
@@ -91,6 +93,35 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 			e.printStackTrace();
 			return;
 		}	
+	}
+
+	public int unlink (String path) throws RemoteException{
+		
+		path = root + path;
+
+		System.err.println(String.format("#### Unlink called for path %s", path));
+		File currFile = new File(path);
+		if (!currFile.exists()){
+			System.err.println("Error: unlink called on file which does not exist");
+			return -2;
+		}
+		boolean deleted = false;
+		try{
+			deleted = currFile.delete();
+		}
+		catch (SecurityException e){
+			e.printStackTrace();
+			return -1;
+		}
+		if (deleted){
+			System.err.println("Deleted properly");
+			versionMap.put(path, (long)-1);
+			System.err.println(String.format("New version: %d", versionMap.get(path)));
+			return 0;
+		}
+		System.out.println("Error: file not properly deleted");
+		return -3;
+	
 	}
 	
 	public custFile chunkRead(custFile cFile,long offset, long chunkSize) throws RemoteException {

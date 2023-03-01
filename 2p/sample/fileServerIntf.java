@@ -6,4 +6,5 @@ public interface fileServerIntf extends Remote{
 	long checkVersion(String pathname) throws RemoteException;
 	custFile chunkRead(custFile cFile, long offset, long chunkSize) throws RemoteException;
 	void chunkWrite(custFile cFile, boolean firstIteration) throws RemoteException;
+	int unlink(String path) throws RemoteException;
 }
