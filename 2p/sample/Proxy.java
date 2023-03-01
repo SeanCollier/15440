@@ -10,7 +10,7 @@ import java.rmi.registry.*;
 
 class Proxy {
 	
-	publtic String cacheDir;
+	public static String cacheDir;
 	public static Cache cache;
 	public static fileServerIntf server;
 	private static long chunkSize = 250000;

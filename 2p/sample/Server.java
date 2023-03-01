@@ -5,16 +5,29 @@ import java.rmi.Naming;
 import java.io.*;
 import java.util.*;
 
+/*
+	The Server class implements fileServerIntf interface to act as a file server which may be used to handle RPC requests from clients sending requests to a Proxy class
+*/
 public class Server extends UnicastRemoteObject implements fileServerIntf {
 
 	public String root;
 	public long defaultVersionOnMiss = 1;
 	public HashMap<String, Long> versionMap = new HashMap<String, Long>();
 
+
+	/*
+		[description]: constructor for Server class
+		[in]: port (port number for server)
+	*/
 	public Server(int port) throws RemoteException {
 		super(port);
 	}
 
+	/*
+		[description]: version number of the file at given pathname which has been exists on the server
+		[in]: pathname (pathname of file of which to check version
+		[out]: version number of file at pathname
+	*/
 	public long checkVersion(String pathname) throws RemoteException{
 		pathname = root + pathname;
 		System.err.println(String.format("Checking version for pathname: %s", pathname));
@@ -22,6 +35,10 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		return versionMap.getOrDefault(pathname, defaultVersionOnMiss);
 	}
 
+	/*
+		[description]: deletes current version of file associated with cFile and creates new, empty file to be written to
+		[in]: cFile (custFile containing metadata of file)
+	*/
 	public void close(custFile cFile){
 		String newPathname = root + cFile.pathname;
 		File file = new File (newPathname);
@@ -53,6 +70,11 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		
 	}
 
+	/*
+		[description]: called by client to get metada of file associated with cFile and get the first chunk of data in file
+		[in]: cFile (custFile containing metadata of file), chunkSize (size of chunk to read from fileData)
+		[out]: custFile containing metadata and first chunk of data in file
+	*/
 	public custFile open(custFile cFile, long chunkSize) throws RemoteException{
 		File file = new File(root + cFile.pathname);
 		System.err.println(String.format("Open called for file with path: %s", root + cFile.pathname));
@@ -76,6 +98,10 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		return cFile;
 	}
 
+	/*
+		[description]: called by client to overwrite chunk of file based on cFile
+		[in]: cFile (contains data to write and metadata about file to write to), firstIteration (denotes if this is the firstIteration of this call by the client, in which case close must be called)
+	*/
 	public void chunkWrite(custFile cFile, boolean firstIteration) {
 	//	System.err.println(String.format("Writing in chunks to pathname: %s", cFile.pathname));
 		if (firstIteration){
@@ -95,6 +121,11 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 		}	
 	}
 
+	/*
+		[description]: deletes file at given path, if it exists
+		[in]: path (pathname of file to delete)
+		[out]: 0 on successful deletion, error code to be interpreted by client on error
+	*/
 	public int unlink (String path) throws RemoteException{
 		
 		path = root + path;
@@ -124,6 +155,11 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 	
 	}
 	
+	/*
+		[description]: reads chunk of data from file described by cFile 
+		[in]: cFile (custFile containg information about the file to be read from), offset (offset to read from in file), chunkSize (number of bytes to read)
+		[out]: custFile containing chunk of data from file
+	*/
 	public custFile chunkRead(custFile cFile,long offset, long chunkSize) throws RemoteException {
 
 	//	System.err.println(String.format("chunkRead called with pathname: %s and offset: %d", cFile.pathname, offset));
@@ -176,6 +212,10 @@ public class Server extends UnicastRemoteObject implements fileServerIntf {
 
 	}
 
+	/*
+		[description]: stores server in registry
+		[in]: args (arguments passed in on command line
+	*/
 	public static void main (String[] args) throws IOException {
 		int port = Integer.parseInt(args[0]);
 
