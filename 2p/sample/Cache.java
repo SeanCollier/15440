@@ -50,17 +50,7 @@ class Cache {
 			Iterator values = cacheMap.values().iterator();
 			while (values.hasNext()){
 				//String nextKey = (String) keys.next();
-				CacheFile nextCacheFile = (CacheFile) values.next();
-				/*
-				System.err.println("____________________________");
-				System.err.println(nextCacheFile.pathname);
-				System.err.println(nextCacheFile.readOnly);
-				System.err.println(nextCacheFile.pathname.startsWith(currCustFile.adjPathname));
-				System.err.println(nextCacheFile.refCount);
-				System.err.println(nextCacheFile.version < currVersion);
-				System.err.println(nextCacheFile.version);
-				System.err.println(currVersion);
-				*/
+				CacheFile nextCacheFile = (CacheFile) values.next();	
 				if (nextCacheFile.readOnly && nextCacheFile.pathname.startsWith(currCustFile.adjPathname) && nextCacheFile.refCount == 0 && nextCacheFile.version < currVersion){
 					System.err.println(String.format("Deleting old readOnly version: %s", nextCacheFile.pathname));
 					File file = new File(root + "/" + nextCacheFile.pathname);
@@ -297,8 +287,9 @@ class Cache {
 		long offset = chunkSize;
 		RandomAccessFile raf = new RandomAccessFile(file, "rw");
 		raf.write(cFile.data);
-		while (offset <= cFile.length){
+		while (offset < cFile.length){
 			System.err.println(String.format("offset: %d, file length: %d", offset, cFile.length));
+			cFile.data = null;
 			cFile = server.chunkRead(cFile, offset, chunkSize);
 			if (cFile.error != null){
 				return;

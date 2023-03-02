@@ -14,6 +14,7 @@ class Proxy {
 	public static Cache cache;
 	public static fileServerIntf server;
 	private static long chunkSize = 250000;
+	private static Object lock = new Object();
 
 
 	/*
@@ -55,7 +56,9 @@ class Proxy {
 			newCustFile = new custFile(path, mode);
 
 			//query cache for file
-			newCustFile = cache.query(path, mode, newCustFile);
+			synchronized (lock){
+				newCustFile = cache.query(path, mode, newCustFile);
+			}
 			newCustFile.mode = mode;
 			newCustFile.pathname = path;
 			String pathInCache = newCustFile.returnPath;
@@ -235,7 +238,9 @@ class Proxy {
 						currRaf.close();
 						currCustFile.raf = null;
 					}
-					cache.close(currCustFile);
+					synchronized (lock){
+						cache.close(currCustFile);
+					}
 				}
 				catch(IOException e){
 					System.err.println("Error: IOException caught when attempting to close raf");
@@ -331,7 +336,9 @@ class Proxy {
 			}
 
 			System.err.println(String.format("Wrote %d bytes", buf.length));
-			cache.updateSize(currFile.length() - origSize);
+			synchronized (lock){
+				cache.updateSize(currFile.length() - origSize);
+			}
 			currCustFile.doesExist = true;
 
 			return buf.length;
