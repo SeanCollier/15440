@@ -18,6 +18,10 @@ public class Server implements ProjectLib.CommitServing {
 
     public static int TIMEOUT = 6000;
 	
+    /*
+    * [description]: begins a new TPC object to handle the current request
+    * [in]: filename (name of collage file), img (btye[] containing image data), sources (array containing source files and owners)
+    */
 	public void startCommit( String filename, byte[] img, String[] sources ) {
 		System.out.println( "Server: Got request to commit "+filename );
         TPC tpc = new TPC(filename, img, sources, PL);
@@ -25,6 +29,10 @@ public class Server implements ProjectLib.CommitServing {
         t.start();
 	}
 	
+    /*
+    * [description]: parses arguments and launches new server, syncHandler, and ProjectLib
+    * [in]: args (command line arguments)
+    */
 	public static void main ( String args[] ) throws Exception {
 		if (args.length != 1) throw new Exception("Need 1 arg: <port>");
 		Server srv = new Server();
@@ -32,16 +40,8 @@ public class Server implements ProjectLib.CommitServing {
 		PL = new ProjectLib( Integer.parseInt(args[0]), srv, sh );
 
 		
-		// main loop
-		/*while (true) {
-			ProjectLib.Message msg = PL.getMessage();
-			System.out.println( "Server: Got message from " + msg.addr );
-			System.out.println( "Server: Echoing message to " + msg.addr );
-			PL.sendMessage( msg );
-		}*/
 	}
     
-
     public static class TPC implements Runnable {
         private String filename;
         private byte[] img;
@@ -58,6 +58,9 @@ public class Server implements ProjectLib.CommitServing {
             this.PL = PL;
         }
 
+        /*
+        * [description]: main function of TPC object, compiles list of users and sources and sends and receives necessary messages to carry out a commit
+        */
         public void run(){
             for (int i = 0; i < sources.length; i++){
                 String source = sources[i];
@@ -87,6 +90,11 @@ public class Server implements ProjectLib.CommitServing {
             System.out.println(String.format("All users successfully notified for %s", filename));
 
         }
+
+         /*
+        * [description]: notify the users in question 
+        * [in]: userSources (hashmap mapping users to list of their sources in the collage), committed (the result of whether or not the collage was successfully committed)
+        */
 
         public void notifyUsers(ConcurrentHashMap<String, ArrayList<String>> userSources, boolean committed) {
             while (userSources.size() != 0){
@@ -128,7 +136,11 @@ public class Server implements ProjectLib.CommitServing {
             }
 
         }
+    
 
+        /*
+        * [description]: commits the collage by creating a new file and writing the collage data to it
+        */
         public void commit(){
             try{
                 FileOutputStream fos = new FileOutputStream(filename);
@@ -141,6 +153,10 @@ public class Server implements ProjectLib.CommitServing {
             }
         }
 
+         /*
+        * [description]: collects the votes of the users in question as to whether the collage in question should be committed or not
+        * [out]: true if everyone votes yes, false if anyone votes no or it times out
+        */
         public boolean collectVotes(){
             Iterator<String> iter = userSources.keySet().iterator();
             while (iter.hasNext()){

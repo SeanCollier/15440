@@ -1,12 +1,12 @@
 /* Skeleton code for UserNode */
-import java.util.HashSet;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.io.File;
 import java.nio.file.Paths;
 import java.nio.file.*;
 
 public class UserNode implements ProjectLib.MessageHandling {
 	public final String myId;
-    public HashSet<String> lockedFiles = new HashSet<String>();
+    public ConcurrentSkipListSet<String> lockedFiles = new ConcurrentSkipListSet<String>();
     private static ProjectLib PL;
 
     public static int VOTE_REQUEST = 0;
@@ -16,6 +16,12 @@ public class UserNode implements ProjectLib.MessageHandling {
 	public UserNode( String id ) {
 		myId = id;
 	}
+
+    /*
+    * [description]: is called upon receiving a message from the server, and carries out the request of the server
+    * [in]: msg (Message that was received)
+    * [out]: true
+    */
 
 	public boolean deliverMessage( ProjectLib.Message msg ) {
 		System.out.println( myId + ": Got message from " + msg.addr );
@@ -36,6 +42,10 @@ public class UserNode implements ProjectLib.MessageHandling {
         return true;
 	}
 
+    /*
+    * [description]: responds to the servers reported decision about a collage by unlocking/deleting necessary files, and sends an ack back to the server
+    * [in]: cmsg (custMessage containing data about the collage, and whether the server committed it or not), addr (server address to send ack back to)
+    */
     public void ackReply(custMessage cmsg, String addr){
         System.out.println(String.format("%s: reply received about filename %s, which committed is %b", myId, cmsg.filename, cmsg.vote));
         for (int i = 0; i < cmsg.sources.length; i ++){
@@ -61,6 +71,11 @@ public class UserNode implements ProjectLib.MessageHandling {
 
     }
 
+    /*
+    * [description]: gets this users vote about the collage in question
+    * [in]: cmsg (custMessage containing data about the collage in question)
+    * [out]: boolean representing this users vote
+    */
     public boolean getVote(custMessage cmsg){
         boolean vote = true;
         for (int i = 0; i < cmsg.sources.length; i ++){
@@ -87,6 +102,10 @@ public class UserNode implements ProjectLib.MessageHandling {
         return vote;
     }
 	
+    /*
+    * [description]: user main function, spawns a new node and project lib
+    * [in]: args (command line arguments)
+    */
 	public static void main ( String args[] ) throws Exception {
 		if (args.length != 2) throw new Exception("Need 2 args: <port> <id>");
 		UserNode UN = new UserNode(args[1]);

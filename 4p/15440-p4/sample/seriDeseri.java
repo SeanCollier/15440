@@ -1,6 +1,13 @@
 import java.io.*;
 
+
 public class seriDeseri {
+    
+    /*
+    * [description]: serializes a custmessage object into a byte array so it can be sent in a message
+    * [in]: cmsg (custmessage to serialize)
+    * [out]: byte array to send in a message body
+    */
     public static byte[] serialize(custMessage cmsg){
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -14,6 +21,11 @@ public class seriDeseri {
         }
     }
 
+     /*
+    * [description]: deserializes a message body byte array into a custMessage object
+    * [in]: byte array to deserialize
+    * [out]: custMessage object containing data sent in message body
+    */
     public static custMessage deserialize(byte[] bytes){
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
