@@ -6,6 +6,7 @@ public class custMessage implements Serializable {
     String[] sources;
     byte[] img;
     int type;
+    String addr;
 
     public custMessage( String filename, String[] sources, byte[] img, int type){
         this.filename = filename;
